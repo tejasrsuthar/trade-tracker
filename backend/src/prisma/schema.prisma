@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Account {
+  id              String        @id @default(uuid())
+  name            String
+  startingBalance Float
+  liveTrades      LiveTrade[]
+  closedTrades    ClosedTrade[]
+}
+
+model LiveTrade {
+  id           String   @id @default(uuid())
+  accountId    String
+  symbol       String
+  entryPrice   Float
+  tradeType    String
+  size         String
+  qty          Int
+  slPercentage Float
+  entryDate    DateTime @default(now())
+  account      Account  @relation(fields: [accountId], references: [id])
+}
+
+model ClosedTrade {
+  id         String   @id @default(uuid())
+  accountId  String
+  symbol     String
+  entryPrice Float
+  exitPrice  Float
+  tradeType  String
+  size       String
+  qty        Int
+  entryDate  DateTime
+  exitDate   DateTime @default(now())
+  fees       Float?
+  realizedPL Float
+  account    Account  @relation(fields: [accountId], references: [id])
+}
