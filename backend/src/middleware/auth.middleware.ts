@@ -6,11 +6,14 @@
 
 import { Request, Response, NextFunction } from 'express';
 import passport from 'passport';
+import { StatusCodes } from 'http-status-codes';
 import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
 import { Strategy as LocalStrategy } from 'passport-local';
 import { PrismaClient } from '@prisma/client';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import bcrypt from 'bcrypt';
+
+import logger, { createLogger } from '../lib/logger';
 
 /** Prisma client instance for database operations */
 const prisma = new PrismaClient();
@@ -19,12 +22,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 /** OpenTelemetry tracer for monitoring authentication operations */
 const tracer = trace.getTracer('trade-backend');
 
+const authLogger = createLogger({ module: 'auth', component: 'middleware' });
+
 /**
  * Configure Passport's local authentication strategy
  * @description Verifies user credentials against the database
  */
 passport.use(
   new LocalStrategy(
+    {
+      usernameField: 'email',
+      passwordField: 'password'
+    },
     /**
      * Verify callback for local strategy
      * @param {string} email - User's email address
@@ -36,6 +45,7 @@ passport.use(
         const user = await prisma.user.findUnique({ where: { email } });
 
         if (!user || !(await bcrypt.compare(password, user.password))) {
+          authLogger.error({ email }, 'Invalid credentials');
           return done(null, false, { message: 'Invalid credentials' });
         }
 
@@ -89,6 +99,11 @@ passport.use(
  * @returns {void}
  */
 export const authenticateJWT = (req: Request, res: Response, next: NextFunction) => {
+  const requestLogger = authLogger.child({
+    requestId: req.headers['x-request-id'] as string,
+    method: 'authenticateJWT',
+  });
+
   return tracer.startActiveSpan('authenticateJWT', async (span) => {
     passport.authenticate('jwt', { session: false }, /**
      * JWT authentication callback
@@ -96,14 +111,15 @@ export const authenticateJWT = (req: Request, res: Response, next: NextFunction)
      * @param {any} user - User object if authentication succeeded
      */
       (err: Error, user: any) => {
-
         if (err || !user) {
+          requestLogger.error({ error: err }, 'Unauthorized');
           span.setStatus({ code: SpanStatusCode.ERROR, message: 'Unauthorized' });
           span.end();
-          return res.status(401).json({ error: 'Unauthorized' });
+          return res.status(StatusCodes.CREATED).json({ error: 'Unauthorized' });
         }
 
         req.user = user;
+        requestLogger.debug({ userId: user.userId }, 'User authenticated successfully');
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
 
@@ -121,6 +137,11 @@ export const authenticateJWT = (req: Request, res: Response, next: NextFunction)
  * @returns {void}
  */
 export const authenticateLocal = (req: Request, res: Response, next: NextFunction) => {
+  const requestLogger = authLogger.child({
+    requestId: req.headers['x-request-id'] as string,
+    method: 'authenticateLocal',
+  });
+
   return tracer.startActiveSpan('authenticateLocal', async (span) => {
     passport.authenticate('local', { session: false }, /**
      * Local authentication callback
@@ -131,12 +152,14 @@ export const authenticateLocal = (req: Request, res: Response, next: NextFunctio
       (err: Error, user: any, info: { message?: string; }) => {
 
         if (err || !user) {
-          span.setStatus({ code: SpanStatusCode.ERROR, message: info?.message || 'Authentication failed' });
+          requestLogger.error({ error: err }, 'Local Authentication failed');
+          span.setStatus({ code: SpanStatusCode.ERROR, message: info?.message || 'Local Authentication failed' });
           span.end();
-          return res.status(401).json({ error: info?.message || 'Authentication failed' });
+          return res.status(StatusCodes.CREATED).json({ error: info?.message || 'Local Authentication failed' });
         }
 
         req.user = user;
+        requestLogger.debug({ userId: user.userId }, 'User authenticated successfully');
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
 

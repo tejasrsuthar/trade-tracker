@@ -14,6 +14,10 @@ import tradeRoutes from './routes/trades.route';
 import authRoutes from './routes/auth.route';
 import { connectProducer } from './services/kafka.producer';
 import { initTelemetry } from './services/telemetry.service';
+import { setupSwagger } from './swagger/swaggerServe';
+import logger from './lib/logger';
+import { requestLogger } from './middleware/logger.middleware';
+import { addRequestId } from './middleware/requestId.middleware';
 import './middleware/auth.middleware';
 
 /**
@@ -22,6 +26,8 @@ import './middleware/auth.middleware';
 const app = express();
 
 // Configure middleware
+app.use(addRequestId);
+app.use(requestLogger);
 app.use(express.json());
 app.use(cookieParser());
 app.use(passport.initialize());
@@ -30,6 +36,10 @@ app.use(passport.initialize());
 app.use('/api/trades', tradeRoutes);
 app.use('/api/auth', authRoutes);
 
+// setup swagger UI
+setupSwagger(app);
+
+const PORT = process.env.PORT || 6000;
 /**
  * Initializes and starts the server
  * Sets up telemetry and Kafka producer before starting Express
@@ -37,7 +47,20 @@ app.use('/api/auth', authRoutes);
 const startServer = async () => {
   initTelemetry();
   await connectProducer();
-  app.listen(6000, () => console.log('Backend running on port 6000'));
+  app.listen(PORT, () => {
+    logger.info(`Server is running on http://localhost:${PORT}`);
+    logger.info(`Swagger documentation available at http://localhost:${PORT}/api-docs`);
+  });
+
+  process.on('uncaughtException', (error) => {
+    logger.fatal(error, 'Uncaught Exception');
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.fatal({ reason, promise }, 'Unhandled Rejection');
+    process.exit(1);
+  });
 };
 
 startServer();

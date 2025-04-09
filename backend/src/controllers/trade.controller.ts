@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { StatusCodes } from 'http-status-codes';
+
 import { sendMessage } from '../services/kafka.producer';
 import { LiveTrade } from '../types';
 import { liveTradeSchema, updateLiveTradeSchema, closeTradeSchema } from '../schemas/trade.schema';
@@ -27,10 +29,10 @@ export const createLiveTrade = async (req: Request, res: Response) => {
       };
       await sendMessage('trade-events', { event: 'TradeCreated', trade });
       span.setStatus({ code: SpanStatusCode.OK });
-      res.status(201).json(trade);
+      res.status(StatusCodes.CREATED).json(trade);
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(400).json({ error: (error as Error).message });
+      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
     } finally {
       span.end();
     }
@@ -57,7 +59,7 @@ export const updateLiveTrade = async (req: Request, res: Response) => {
       res.json(trade);
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(400).json({ error: (error as Error).message });
+      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
     } finally {
       span.end();
     }
@@ -82,7 +84,7 @@ export const deleteLiveTrade = async (req: Request, res: Response) => {
       res.status(204).send();
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(400).json({ error: (error as Error).message });
+      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
     } finally {
       span.end();
     }
@@ -106,10 +108,10 @@ export const closeLiveTrade = async (req: Request, res: Response) => {
       const { exitPrice, fees } = closeTradeSchema.parse(req.body);
       await sendMessage('trade-events', { event: 'TradeClosed', trade: { id, exitPrice, fees } });
       span.setStatus({ code: SpanStatusCode.OK });
-      res.status(200).json({ message: 'Trade closed' });
+      res.status(StatusCodes.OK).json({ message: 'Trade closed' });
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(400).json({ error: (error as Error).message });
+      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
     } finally {
       span.end();
     }
@@ -138,7 +140,7 @@ export const getLiveTradesHandler = async (req: Request, res: Response) => {
       res.json(trades);
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(400).json({ error: (error as Error).message });
+      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
     } finally {
       span.end();
     }
@@ -167,7 +169,7 @@ export const getClosedTradesHandler = async (req: Request, res: Response) => {
       res.json(trades);
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(400).json({ error: (error as Error).message });
+      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
     } finally {
       span.end();
     }

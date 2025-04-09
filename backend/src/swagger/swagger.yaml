@@ -1,0 +1,233 @@
+openapi: 3.0.0
+info:
+  title: Trade Tracker API
+  description: API documentation for Trade Tracker application
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:6000
+    description: Local development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Trade:
+      type: object
+      properties:
+        id:
+          type: string
+        symbol:
+          type: string
+        entry:
+          type: number
+        stopLoss:
+          type: number
+        takeProfit:
+          type: number
+        quantity:
+          type: number
+        direction:
+          type: string
+          enum: [LONG, SHORT]
+        status:
+          type: string
+          enum: [OPEN, CLOSED]
+        userId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        name:
+          type: string
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      security: []
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        201:
+          description: User registered successfully
+        400:
+          description: Invalid input
+        409:
+          description: Email already exists
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      security: []
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        200:
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+
+  /api/trades/live:
+    post:
+      tags:
+        - Trades
+      summary: Create a new live trade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Trade"
+      responses:
+        201:
+          description: Trade created successfully
+        400:
+          description: Invalid input
+        401:
+          description: Unauthorized
+
+    get:
+      tags:
+        - Trades
+      summary: Get all live trades
+      responses:
+        200:
+          description: List of live trades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+        401:
+          description: Unauthorized
+
+  /api/trades/live/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+
+    put:
+      tags:
+        - Trades
+      summary: Update a live trade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Trade"
+      responses:
+        200:
+          description: Trade updated successfully
+        400:
+          description: Invalid input
+        401:
+          description: Unauthorized
+        404:
+          description: Trade not found
+
+    delete:
+      tags:
+        - Trades
+      summary: Delete a live trade
+      responses:
+        200:
+          description: Trade deleted successfully
+        401:
+          description: Unauthorized
+        404:
+          description: Trade not found
+
+  /api/trades/live/{id}/close:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+
+    post:
+      tags:
+        - Trades
+      summary: Close a live trade
+      responses:
+        200:
+          description: Trade closed successfully
+        401:
+          description: Unauthorized
+        404:
+          description: Trade not found
+
+  /api/trades/closed:
+    get:
+      tags:
+        - Trades
+      summary: Get all closed trades
+      responses:
+        200:
+          description: List of closed trades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+        401:
+          description: Unauthorized

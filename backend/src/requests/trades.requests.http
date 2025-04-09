@@ -1,0 +1,42 @@
+@host = http://localhost:6000
+@accountId = "7a3d4ce6-4200-4703-b443-2b6200500b38"
+
+### Create Live Trade
+POST {{host}}/api/trades/live
+Content-Type: application/json
+
+{
+    "symbol": "AAPL",
+    "entry": 180.50,
+    "stopLoss": 178.50,
+    "takeProfit": 185.00,
+    "quantity": 100,
+    "accountId": {{accountId}}
+}
+
+### Get All Live Trades
+GET {{host}}/api/trades/live?accountId={{accountId}}
+
+### Update Live Trade
+PUT {{host}}/api/trades/live/1
+Content-Type: application/json
+
+{
+    "stopLoss": 177.50,
+    "takeProfit": 186.00,
+    "accountId": {{accountId}}
+}
+
+### Delete Live Trade
+DELETE {{host}}/api/trades/live/1?accountId={{accountId}}
+
+### Close Live Trade
+POST {{host}}/api/trades/live/1/close
+Content-Type: application/json
+
+{
+    "accountId": {{accountId}}
+}
+
+### Get All Closed Trades
+GET {{host}}/api/trades/closed?accountId={{accountId}}

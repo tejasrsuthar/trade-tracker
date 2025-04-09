@@ -7,7 +7,11 @@ import { z } from 'zod';
  */
 export const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  password: z.string().min(8),
+  account: z.object({
+    name: z.string(),
+    startingBalance: z.number().positive()
+  })
 });
 
 /**
