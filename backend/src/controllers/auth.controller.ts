@@ -12,10 +12,11 @@ import { StatusCodes } from 'http-status-codes';
 
 import { registerSchema, loginSchema } from '../schemas/auth.schema';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
-import logger from '../lib/logger';
+import logger, { createLogger } from '../lib/logger';
 
 const prisma = new PrismaClient();
 const tracer = trace.getTracer('auth-service');
+const authLogger = createLogger({ module: 'auth', component: 'controller' });
 
 /**
  * Registers a new user with their account details
@@ -25,10 +26,28 @@ const tracer = trace.getTracer('auth-service');
  * @throws {Error} When registration fails
  */
 export const register = async (req: Request, res: Response) => {
+  const requestLogger = authLogger.child({
+    requestId: req.id,
+    method: 'register',
+  });
+
   return tracer.startActiveSpan('register_user', async (span) => {
     try {
-      logger.info('Starting user registration process');
+      requestLogger.info('Starting user registration process');
       const { email, password, account } = registerSchema.parse(req.body);
+
+      // Check if user with this email already exists
+      const existingUser = await prisma.user.findUnique({
+        where: { email }
+      });
+
+      if (existingUser) {
+        const errorMessage = 'Registration failed: Email already exists';
+        requestLogger.warn({ email }, errorMessage);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+        return res.status(StatusCodes.CONFLICT).json({ error: errorMessage });
+      }
+
       const hashedPassword = await bcrypt.hash(password, 10);
 
       const result = await prisma.$transaction(async (tx) => {
@@ -76,26 +95,29 @@ export const register = async (req: Request, res: Response) => {
       res.cookie('jwt', token, defaultCookieOptions);
       res.cookie('refreshToken', result.refreshToken, refreshCookieOptions);
 
-      span.setStatus({ code: SpanStatusCode.OK });
-      logger.info({ userId: result.user.id }, 'User registered successfully');
+      const successMessage = 'User registered successfully';
+      span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+      requestLogger.info({ userId: result.user.id }, successMessage);
+
       res.status(StatusCodes.CREATED).json({
-        message: 'User registered successfully',
+        message: successMessage,
         userId: result.user.id,
         accountId: result.account.id
       });
     } catch (error: unknown) {
+      const errorMessage = 'Internal server error';
       span.setStatus({
         code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : errorMessage
       });
 
       if (error instanceof z.ZodError) {
-        logger.error({ error: error.errors }, 'Validation error during registration');
+        requestLogger.error({ error: error.errors }, 'Validation error during registration');
         return res.status(StatusCodes.BAD_REQUEST).json({ error: error.errors });
       }
 
-      logger.error({ error }, 'Internal server error during registration');
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal server error' });
+      requestLogger.error({ error }, errorMessage);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: errorMessage });
     } finally {
       span.end();
     }
@@ -110,9 +132,14 @@ export const register = async (req: Request, res: Response) => {
  * @throws {Error} When authentication fails
  */
 export const login = async (req: Request, res: Response) => {
+  const requestLogger = authLogger.child({
+    requestId: req.id,
+    method: 'login',
+  });
+
   return tracer.startActiveSpan('login_user', async (span) => {
     try {
-      logger.info({ email: req.body.email }, 'User login attempt');
+      requestLogger.info({ email: req.body.email }, 'User login attempt');
       const { email, password } = loginSchema.parse(req.body);
 
       const user = await prisma.user.findUnique({
@@ -121,12 +148,13 @@ export const login = async (req: Request, res: Response) => {
       });
 
       if (!user || !(await bcrypt.compare(password, user.password))) {
-        logger.warn({ email: req.body.email }, 'Invalid login credentials');
-        span.setStatus({ code: SpanStatusCode.ERROR, message: 'Invalid credentials' });
-        return res.status(StatusCodes.UNAUTHORIZED).json({ error: 'Invalid credentials' });
+        const errorMessage = 'Invalid login credentials';
+        requestLogger.warn({ email: req.body.email }, errorMessage);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+
+        return res.status(StatusCodes.UNAUTHORIZED).json({ error: errorMessage });
       }
 
-      logger.info({ userId: user.id }, 'User logged in successfully');
       // Generate new tokens
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1h' });
       const refreshToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '7d' });
@@ -149,24 +177,29 @@ export const login = async (req: Request, res: Response) => {
       res.cookie('jwt', token, defaultCookieOptions);
       res.cookie('refreshToken', refreshToken, refreshCookieOptions);
 
-      span.setStatus({ code: SpanStatusCode.OK });
+      const successMessage = 'User logged in successfully';
+      requestLogger.info({ userId: user.id }, successMessage);
+      span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+
       res.status(StatusCodes.OK).json({
-        message: 'Login successful',
+        message: successMessage,
         userId: user.id,
         accountId: user.Account[0].id
       });
     } catch (error: unknown) {
+      const errorMessage = 'Internal server error';
+
       span.setStatus({
         code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : errorMessage
       });
 
       if (error instanceof z.ZodError) {
         return res.status(StatusCodes.BAD_REQUEST).json({ error: error.errors });
       }
 
-      logger.error({ error }, 'Error during login');
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal server error' });
+      requestLogger.error({ error }, errorMessage);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: errorMessage });
     } finally {
       span.end();
     }
@@ -181,29 +214,42 @@ export const login = async (req: Request, res: Response) => {
  * @throws {Error} When logout operation fails
  */
 export const logout = async (req: Request, res: Response) => {
+  const requestLogger = authLogger.child({
+    requestId: req.id,
+    method: 'logout',
+  });
+
   return tracer.startActiveSpan('logout_user', async (span) => {
     try {
       const refreshToken = req.cookies.refreshToken;
 
+      requestLogger.info({ refreshToken }, 'Logout attempt');
       if (refreshToken) {
         // Delete refresh token from database
         await prisma.refreshToken.deleteMany({
           where: { token: refreshToken }
         });
+        requestLogger.info({ userId: req.user.id }, 'Refresh token deleted');
       }
 
       // Clear cookies
       res.clearCookie('jwt');
       res.clearCookie('refreshToken');
 
-      span.setStatus({ code: SpanStatusCode.OK });
-      res.status(StatusCodes.OK).json({ message: 'Logout successful' });
+      const successMessage = 'Logout successful';
+      requestLogger.info({ userId: req.user.id }, successMessage);
+      span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+
+      res.status(StatusCodes.OK).json({ message: successMessage });
     } catch (error: unknown) {
+      const errorMessage = 'Internal server error';
+      requestLogger.error({ error }, errorMessage);
       span.setStatus({
         code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : errorMessage
       });
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal server error' });
+
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: errorMessage });
     } finally {
       span.end();
     }
@@ -218,13 +264,21 @@ export const logout = async (req: Request, res: Response) => {
  * @throws {Error} When token refresh fails
  */
 export const refresh = async (req: Request, res: Response) => {
+  const requestLogger = authLogger.child({
+    requestId: req.id,
+    method: 'refresh',
+  });
+
   return tracer.startActiveSpan('refresh_token', async (span) => {
     try {
       const refreshToken = req.cookies.refreshToken;
 
       if (!refreshToken) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: 'No refresh token provided' });
-        return res.status(StatusCodes.UNAUTHORIZED).json({ error: 'No refresh token provided' });
+        const errorMessage = "No refresh token provided";
+        requestLogger.error({ error: errorMessage });
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+
+        return res.status(StatusCodes.UNAUTHORIZED).json({ error: errorMessage });
       }
 
       // Verify refresh token
@@ -234,8 +288,11 @@ export const refresh = async (req: Request, res: Response) => {
       });
 
       if (!storedToken || storedToken.expiresAt < new Date()) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: 'Invalid refresh token' });
-        return res.status(StatusCodes.UNAUTHORIZED).json({ error: 'Invalid refresh token' });
+        const errorMessage = 'Invalid refresh token';
+        requestLogger.error({ error: errorMessage });
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+
+        return res.status(StatusCodes.UNAUTHORIZED).json({ error: errorMessage });
       }
 
       // Generate new tokens
@@ -258,14 +315,20 @@ export const refresh = async (req: Request, res: Response) => {
       res.cookie('jwt', newToken, defaultCookieOptions); // 1 hour
       res.cookie('refreshToken', newRefreshToken, refreshCookieOptions); // 7 days
 
-      span.setStatus({ code: SpanStatusCode.OK });
-      res.status(StatusCodes.OK).json({ message: 'Token refreshed successfully' });
+      const successMessage = 'Token refreshed successfully';
+      requestLogger.info({ userId: req.user.id }, successMessage);
+      span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+
+      res.status(StatusCodes.OK).json({ message: successMessage });
     } catch (error: unknown) {
+      const errorMessage = 'Internal server error';
+      requestLogger.error({ error }, errorMessage);
       span.setStatus({
         code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : errorMessage
       });
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal server error' });
+
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: errorMessage });
     } finally {
       span.end();
     }
@@ -286,7 +349,6 @@ interface CookieOptions {
  * Default cookie configuration for JWT tokens
  * @type {CookieOptions}
  */
-// Add these constants after the tracer initialization
 const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 

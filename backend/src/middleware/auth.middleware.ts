@@ -24,38 +24,7 @@ const tracer = trace.getTracer('trade-backend');
 
 const authLogger = createLogger({ module: 'auth', component: 'middleware' });
 
-/**
- * Configure Passport's local authentication strategy
- * @description Verifies user credentials against the database
- */
-passport.use(
-  new LocalStrategy(
-    {
-      usernameField: 'email',
-      passwordField: 'password'
-    },
-    /**
-     * Verify callback for local strategy
-     * @param {string} email - User's email address
-     * @param {string} password - User's password
-     * @param {Function} done - Passport callback to return result
-     */
-    async (email, password, done) => {
-      try {
-        const user = await prisma.user.findUnique({ where: { email } });
 
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-          authLogger.error({ email }, 'Invalid credentials');
-          return done(null, false, { message: 'Invalid credentials' });
-        }
-
-        return done(null, user);
-      } catch (error) {
-        return done(error);
-      }
-    }
-  )
-);
 
 /**
  * Configure Passport's JWT authentication strategy
@@ -100,7 +69,7 @@ passport.use(
  */
 export const authenticateJWT = (req: Request, res: Response, next: NextFunction) => {
   const requestLogger = authLogger.child({
-    requestId: req.headers['x-request-id'] as string,
+    requestId: req.id,
     method: 'authenticateJWT',
   });
 
@@ -129,6 +98,39 @@ export const authenticateJWT = (req: Request, res: Response, next: NextFunction)
 };
 
 /**
+ * Configure Passport's local authentication strategy
+ * @description Verifies user credentials against the database
+ */
+passport.use(
+  new LocalStrategy(
+    {
+      usernameField: 'email',
+      passwordField: 'password'
+    },
+    /**
+     * Verify callback for local strategy
+     * @param {string} email - User's email address
+     * @param {string} password - User's password
+     * @param {Function} done - Passport callback to return result
+     */
+    async (email, password, done) => {
+      try {
+        const user = await prisma.user.findUnique({ where: { email } });
+
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+          authLogger.error({ email }, 'Invalid credentials');
+          return done(null, false, { message: 'Invalid credentials' });
+        }
+
+        return done(null, user);
+      } catch (error) {
+        return done(error);
+      }
+    }
+  )
+);
+
+/**
  * Local authentication middleware
  * @description Authenticates requests using username/password with OpenTelemetry tracing
  * @param {Request} req - Express request object
@@ -138,7 +140,7 @@ export const authenticateJWT = (req: Request, res: Response, next: NextFunction)
  */
 export const authenticateLocal = (req: Request, res: Response, next: NextFunction) => {
   const requestLogger = authLogger.child({
-    requestId: req.headers['x-request-id'] as string,
+    requestId: req.id,
     method: 'authenticateLocal',
   });
 
@@ -152,15 +154,17 @@ export const authenticateLocal = (req: Request, res: Response, next: NextFunctio
       (err: Error, user: any, info: { message?: string; }) => {
 
         if (err || !user) {
-          requestLogger.error({ error: err }, 'Local Authentication failed');
-          span.setStatus({ code: SpanStatusCode.ERROR, message: info?.message || 'Local Authentication failed' });
+          const errorMessage = info?.message || 'Local Authentication failed';
+          requestLogger.error({ error: err }, errorMessage);
+          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
           span.end();
-          return res.status(StatusCodes.CREATED).json({ error: info?.message || 'Local Authentication failed' });
+          return res.status(StatusCodes.BAD_REQUEST).json({ error: errorMessage });
         }
 
         req.user = user;
-        requestLogger.debug({ userId: user.userId }, 'User authenticated successfully');
-        span.setStatus({ code: SpanStatusCode.OK });
+        const successMessage = 'User authenticated successfully';
+        requestLogger.debug({ userId: user.userId }, successMessage);
+        span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
         span.end();
 
         next();

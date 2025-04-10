@@ -16,7 +16,7 @@ import { connectProducer } from './services/kafka.producer';
 import { initTelemetry } from './services/telemetry.service';
 import { setupSwagger } from './swagger/swaggerServe';
 import logger from './lib/logger';
-import { requestLogger } from './middleware/logger.middleware';
+import { requestLogger } from './middleware/reqLogger.middleware';
 import { addRequestId } from './middleware/requestId.middleware';
 import './middleware/auth.middleware';
 

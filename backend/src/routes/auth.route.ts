@@ -4,7 +4,7 @@
  */
 import express from 'express';
 import { register, login, logout, refresh } from '../controllers/auth.controller';
-import { authenticateLocal } from '../middleware/auth.middleware';
+import { authenticateLocal, authenticateJWT } from '../middleware/auth.middleware';
 
 const router = express.Router();
 
@@ -28,7 +28,7 @@ router.post('/login', authenticateLocal, login);
  * @description Log out user and invalidate session
  * @route POST /logout
  */
-router.post('/logout', logout);
+router.post('/logout', authenticateJWT, logout);
 
 /**
  * POST /api/auth/refresh
