@@ -13,9 +13,11 @@
   "dependencies": {
     "@opentelemetry/api": "^1.8.0",
     "@opentelemetry/auto-instrumentations-node": "^0.57.0",
-    "@opentelemetry/exporter-jaeger": "^1.22.0",
     "@opentelemetry/exporter-prometheus": "^0.52.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.52.1",
     "@opentelemetry/sdk-node": "^0.52.1",
+    "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "@opentelemetry/semantic-conventions": "^1.22.0",
     "@prisma/client": "^5.0.0",
     "@types/async-retry": "^1.4.5",
     "@types/bcrypt": "^5.0.0",

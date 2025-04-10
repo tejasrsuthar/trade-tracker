@@ -63,5 +63,8 @@
     "<!--",
     "<!---"
   ],
-  "editor.fontLigatures": "'calt', 'liga', 'ss01', 'ss02', 'ss03', 'ss04', 'ss05', 'ss06', 'ss07', 'ss08', 'ss09'"
+  "editor.fontLigatures": "'calt', 'liga', 'ss01', 'ss02', 'ss03', 'ss04', 'ss05', 'ss06', 'ss07', 'ss08', 'ss09'",
+  "custom-ui-style.stylesheet": {
+    ".anysphere-markdown-container-root": "font-size: 25px !important; line-height: 1.5 !important;"
+  }
 }

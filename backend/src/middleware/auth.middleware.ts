@@ -24,8 +24,6 @@ const tracer = trace.getTracer('trade-backend');
 
 const authLogger = createLogger({ module: 'auth', component: 'middleware' });
 
-
-
 /**
  * Configure Passport's JWT authentication strategy
  * @description Extracts JWT from cookies and verifies it
@@ -81,15 +79,18 @@ export const authenticateJWT = (req: Request, res: Response, next: NextFunction)
      */
       (err: Error, user: any) => {
         if (err || !user) {
-          requestLogger.error({ error: err }, 'Unauthorized');
-          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Unauthorized' });
+          const errorMessage = err?.message || 'Unauthorized';
+          requestLogger.error({ error: errorMessage });
+          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
           span.end();
-          return res.status(StatusCodes.CREATED).json({ error: 'Unauthorized' });
+
+          return res.status(StatusCodes.UNAUTHORIZED).json({ error: errorMessage });
         }
 
         req.user = user;
-        requestLogger.debug({ userId: user.userId }, 'User authenticated successfully');
-        span.setStatus({ code: SpanStatusCode.OK });
+        const successMessage = 'User authenticated successfully';
+        requestLogger.info({ userId: user.userId }, successMessage);
+        span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
         span.end();
 
         next();
@@ -118,8 +119,9 @@ passport.use(
         const user = await prisma.user.findUnique({ where: { email } });
 
         if (!user || !(await bcrypt.compare(password, user.password))) {
-          authLogger.error({ email }, 'Invalid credentials');
-          return done(null, false, { message: 'Invalid credentials' });
+          const errorMessage = 'Invalid credentials';
+          authLogger.error({ email }, errorMessage);
+          return done(null, false, { message: errorMessage });
         }
 
         return done(null, user);
@@ -145,12 +147,13 @@ export const authenticateLocal = (req: Request, res: Response, next: NextFunctio
   });
 
   return tracer.startActiveSpan('authenticateLocal', async (span) => {
-    passport.authenticate('local', { session: false }, /**
-     * Local authentication callback
-     * @param {Error} err - Error object if authentication failed
-     * @param {any} user - User object if authentication succeeded
-     * @param {Object} info - Additional info object, may contain error message
-     */
+    passport.authenticate('local', { session: false },
+      /**
+       * Local authentication callback
+       * @param {Error} err - Error object if authentication failed
+       * @param {any} user - User object if authentication succeeded
+       * @param {Object} info - Additional info object, may contain error message
+       */
       (err: Error, user: any, info: { message?: string; }) => {
 
         if (err || !user) {
