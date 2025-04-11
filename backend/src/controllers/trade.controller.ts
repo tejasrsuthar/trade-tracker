@@ -7,7 +7,7 @@ import { LiveTrade } from '../types';
 import { liveTradeSchema, updateLiveTradeSchema, closeTradeSchema } from '../schemas/trade.schema';
 import { getLiveTrades, getClosedTrades } from '../services/db.service';
 
-const tracer = trace.getTracer('trade-backend');
+const tracer = trace.getTracer('trade-controller');
 
 /**
  * Creates a new live trade.

@@ -16,7 +16,7 @@ import { createLogger } from '../lib/logger';
 import { getExpirationDate, defaultCookieOptions, refreshCookieOptions } from '../lib/utils';
 
 const prisma = new PrismaClient();
-const tracer = trace.getTracer('trade-backend');
+const tracer = trace.getTracer('auth-controller');
 const authLogger = createLogger({ module: 'auth', component: 'controller' });
 
 /**

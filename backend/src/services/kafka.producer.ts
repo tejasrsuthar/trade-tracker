@@ -46,29 +46,29 @@ export const connectProducer = async () => {
  * @throws {Error} If sending fails after all retries
  */
 export const sendMessage = async (topic: string, message: any) => {
-  const tracer = trace.getTracer('trade-backend');
-  return tracer.startActiveSpan(`kafka-produce-${topic}`, async (span) => {
-    try {
-      await retry(
-        async () => {
-          await producer.send({
-            topic,
-            messages: [{ value: JSON.stringify(message) }],
-          });
-        },
-        {
-          retries: 3,
-          minTimeout: 500,
-          factor: 2,
-          onRetry: (err: Error) => console.warn(`Retrying send to ${topic}:`, err.message),
-        }
-      );
-      span.setStatus({ code: SpanStatusCode.OK });
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      throw error;
-    } finally {
-      span.end();
-    }
-  });
+  const tracer = trace.getTracer('kafka-producer');
+  const span = tracer.startSpan(`kafka_producer_${topic}`);
+
+  try {
+    await retry(
+      async () => {
+        await producer.send({
+          topic,
+          messages: [{ value: JSON.stringify(message) }],
+        });
+      },
+      {
+        retries: 3,
+        minTimeout: 500,
+        factor: 2,
+        onRetry: (err: Error) => console.warn(`Retrying send to ${topic}:`, err.message),
+      }
+    );
+    span.setStatus({ code: SpanStatusCode.OK });
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+    throw error;
+  } finally {
+    span.end();
+  }
 };

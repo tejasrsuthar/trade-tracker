@@ -52,60 +52,56 @@ export const startConsumer = async () => {
      * @returns {Promise<void>} A promise that resolves when message processing is complete
      */
     eachMessage: async ({ message }) => {
-      const tracer = trace.getTracer('trade-backend');
+      const tracer = trace.getTracer('kafka-consumer');
       const data = JSON.parse(message.value?.toString() || '{}');
 
-      /**
-       * Create a new span for OpenTelemetry tracing of this message processing
-       */
-      await tracer.startActiveSpan(`kafka-consume-${data.event}`, async (span) => {
-        try {
-          /**
-           * Process the trade event with retry logic
-           * Handles different event types: TradeCreated, TradeUpdated, TradeDeleted, TradeClosed
-           */
-          await retry(
-            async () => {
-              switch (data.event) {
-                case 'TradeCreated':
-                  await createLiveTrade(data.trade as LiveTrade);
-                  break;
-                case 'TradeUpdated':
-                  await updateLiveTrade(data.trade.id, data.trade as Partial<LiveTrade>);
-                  break;
-                case 'TradeDeleted':
-                  await deleteLiveTrade(data.trade.id);
-                  break;
-                case 'TradeClosed':
-                  await closeLiveTrade(data.trade.id, data.trade.exitPrice, data.trade.fees);
-                  break;
-              }
-            },
-            {
-              retries: 3,
-              minTimeout: 500,
-              factor: 2,
-              onRetry: (err: Error) => console.warn(`Retrying ${data.event} operation:`, err.message),
+      const span = tracer.startSpan(`kafka_consume_${data.event}`);
+      try {
+        /**
+         * Process the trade event with retry logic
+         * Handles different event types: TradeCreated, TradeUpdated, TradeDeleted, TradeClosed
+         */
+        await retry(
+          async () => {
+            switch (data.event) {
+              case 'TradeCreated':
+                await createLiveTrade(data.trade as LiveTrade);
+                break;
+              case 'TradeUpdated':
+                await updateLiveTrade(data.trade.id, data.trade as Partial<LiveTrade>);
+                break;
+              case 'TradeDeleted':
+                await deleteLiveTrade(data.trade.id);
+                break;
+              case 'TradeClosed':
+                await closeLiveTrade(data.trade.id, data.trade.exitPrice, data.trade.fees);
+                break;
             }
-          );
-          /**
-           * Set span status to OK when processing succeeds
-           */
-          span.setStatus({ code: SpanStatusCode.OK });
-        } catch (error) {
-          /**
-           * Set span status to ERROR with error message when processing fails
-           * Then rethrow the error for upstream handling
-           */
-          span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-          throw error;
-        } finally {
-          /**
-           * End the span regardless of success or failure
-           */
-          span.end();
-        }
-      });
+          },
+          {
+            retries: 3,
+            minTimeout: 500,
+            factor: 2,
+            onRetry: (err: Error) => console.warn(`Retrying ${data.event} operation:`, err.message),
+          }
+        );
+        /**
+         * Set span status to OK when processing succeeds
+         */
+        span.setStatus({ code: SpanStatusCode.OK });
+      } catch (error) {
+        /**
+         * Set span status to ERROR with error message when processing fails
+         * Then rethrow the error for upstream handling
+         */
+        span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+        throw error;
+      } finally {
+        /**
+         * End the span regardless of success or failure
+         */
+        span.end();
+      }
     },
   });
 };

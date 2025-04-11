@@ -20,8 +20,7 @@ const prisma = new PrismaClient();
 /** Secret key for JWT signing and verification */
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 /** OpenTelemetry tracer for monitoring authentication operations */
-const tracer = trace.getTracer('trade-backend');
-
+const tracer = trace.getTracer('auth-middleware');
 const authLogger = createLogger({ module: 'auth', component: 'middleware' });
 
 /**
