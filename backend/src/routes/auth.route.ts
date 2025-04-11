@@ -3,7 +3,7 @@
  * @module routes/auth
  */
 import express from 'express';
-import { register, login, logout, refresh } from '../controllers/auth.controller';
+import { register, login, logout, refresh, me } from '../controllers/auth.controller';
 import { authenticateLocal, authenticateJWT } from '../middleware/auth.middleware';
 
 const router = express.Router();
@@ -36,5 +36,12 @@ router.post('/logout', authenticateJWT, logout);
  * @route POST /refresh
  */
 router.post('/refresh', refresh);
+
+/**
+ * GET /api/auth/me
+ * @description Get user information
+ * @route GET /me
+ */
+router.get('/me', authenticateJWT, me);
 
 export default router;

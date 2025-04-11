@@ -83,3 +83,13 @@ export interface Account {
   name: string;
   startingBalance: number;
 }
+
+/**
+ * Cookie options interface for token storage
+ * @interface CookieOptions
+ */
+export interface CookieOptions {
+  httpOnly: boolean;
+  secure: boolean;
+  maxAge: number;
+}

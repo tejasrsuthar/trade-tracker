@@ -13,16 +13,62 @@ import { StatusCodes } from 'http-status-codes';
 import { registerSchema, loginSchema } from '../schemas/auth.schema';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { createLogger } from '../lib/logger';
+import { getExpirationDate, defaultCookieOptions, refreshCookieOptions } from '../lib/utils';
 
 const prisma = new PrismaClient();
 const tracer = trace.getTracer('trade-backend');
 const authLogger = createLogger({ module: 'auth', component: 'controller' });
 
 /**
+ * Retrieves user information (excluding password)
+ * @param {Request} req - Express request object containing user information
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} Promise that resolves to a Response object with user information (excluding password)
+ * @throws {Error} When user information retrieval fails
+ */
+export const me = async (req: Request, res: Response) => {
+  const requestLogger = authLogger.child({
+    requestId: req.id,
+    method: 'me',
+  });
+
+  const span = tracer.startSpan('auth_controller_me');
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        password: false,
+        id: true,
+        email: true,
+        createdAt: true,
+        updatedAt: true,
+        Account: true
+      }
+    });
+
+    const successMessage = 'User information retrieved successfully';
+    requestLogger.info({ userId: req.user.id }, successMessage);
+    span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+
+    return res.status(StatusCodes.OK).json({ user });
+  } catch (error: unknown) {
+    const errorMessage = 'Internal server error';
+    span.recordException(error as Error);
+    span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+    requestLogger.error({ error }, errorMessage);
+
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: errorMessage });
+  } finally {
+    span.end();
+  }
+};
+
+/**
  * Registers a new user with their account details
  * @param {Request} req - Express request object containing user and account details
  * @param {Response} res - Express response object
- * @returns {Promise<void>} JSON response with user and account IDs
+ * @returns {Promise<Response>} Promise that resolves to a Response object with user and account IDs
  * @throws {Error} When registration fails
  */
 export const register = async (req: Request, res: Response) => {
@@ -31,7 +77,7 @@ export const register = async (req: Request, res: Response) => {
     method: 'register',
   });
 
-  const span = tracer.startSpan('register_user');
+  const span = tracer.startSpan('auth_controller_register');
 
   try {
     requestLogger.info('Starting user registration process');
@@ -130,7 +176,7 @@ export const register = async (req: Request, res: Response) => {
  * Authenticates a user and creates new session tokens
  * @param {Request} req - Express request object containing login credentials
  * @param {Response} res - Express response object
- * @returns {Promise<void>} JSON response with login status and user details
+ * @returns {Promise<Response>} Promise that resolves to a Response object with login status and user details
  * @throws {Error} When authentication fails
  */
 export const login = async (req: Request, res: Response) => {
@@ -139,7 +185,7 @@ export const login = async (req: Request, res: Response) => {
     method: 'login',
   });
 
-  const span = tracer.startSpan('login_user');
+  const span = tracer.startSpan('auth_controller_login');
 
   try {
     requestLogger.info({ email: req.body.email }, 'User login attempt');
@@ -213,7 +259,7 @@ export const login = async (req: Request, res: Response) => {
  * Logs out a user by invalidating their tokens
  * @param {Request} req - Express request object containing refresh token in cookies
  * @param {Response} res - Express response object
- * @returns {Promise<void>} JSON response confirming logout
+ * @returns {Promise<Response>} Promise that resolves to a Response object confirming logout
  * @throws {Error} When logout operation fails
  */
 export const logout = async (req: Request, res: Response) => {
@@ -222,7 +268,7 @@ export const logout = async (req: Request, res: Response) => {
     method: 'logout',
   });
 
-  const span = tracer.startSpan('logout_user');
+  const span = tracer.startSpan('auth_controller_logout');
 
   try {
     const refreshToken = req.cookies.refreshToken;
@@ -264,7 +310,7 @@ export const logout = async (req: Request, res: Response) => {
  * Refreshes the user's access token using their refresh token
  * @param {Request} req - Express request object containing refresh token in cookies
  * @param {Response} res - Express response object
- * @returns {Promise<void>} JSON response with new tokens
+ * @returns {Promise<Response>} Promise that resolves to a Response object with new tokens
  * @throws {Error} When token refresh fails
  */
 export const refresh = async (req: Request, res: Response) => {
@@ -273,7 +319,7 @@ export const refresh = async (req: Request, res: Response) => {
     method: 'refresh',
   });
 
-  const span = tracer.startSpan('refresh_token');
+  const span = tracer.startSpan('auth_controller_refresh');
 
   try {
     const refreshToken = req.cookies.refreshToken;
@@ -340,40 +386,4 @@ export const refresh = async (req: Request, res: Response) => {
   } finally {
     span.end();
   }
-};
-
-/**
- * Cookie options interface for token storage
- * @interface CookieOptions
- */
-interface CookieOptions {
-  httpOnly: boolean;
-  secure: boolean;
-  maxAge: number;
-}
-
-/**
- * Default cookie configuration for JWT tokens
- * @type {CookieOptions}
- */
-const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-
-/**
- * Token expiration dates
- */
-const getExpirationDate = {
-  refreshToken: () => new Date(Date.now() + SEVEN_DAYS_MS),
-  accessToken: () => new Date(Date.now() + ONE_HOUR_MS)
-};
-
-const defaultCookieOptions: CookieOptions = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  maxAge: ONE_HOUR_MS
-};
-
-const refreshCookieOptions: CookieOptions = {
-  ...defaultCookieOptions,
-  maxAge: SEVEN_DAYS_MS
 };

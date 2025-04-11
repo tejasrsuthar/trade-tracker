@@ -43,7 +43,16 @@ passport.use(
      */
     async (payload, done) => {
       try {
-        const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+        const user = await prisma.user.findUnique({
+          where: { id: payload.userId },
+          select: {
+            password: false,
+            id: true,
+            email: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        });
 
         if (!user) {
           return done(null, false);
@@ -71,31 +80,32 @@ export const authenticateJWT = (req: Request, res: Response, next: NextFunction)
     method: 'authenticateJWT',
   });
 
-  return tracer.startActiveSpan('authenticateJWT', async (span) => {
-    passport.authenticate('jwt', { session: false }, /**
-     * JWT authentication callback
-     * @param {Error} err - Error object if authentication failed
-     * @param {any} user - User object if authentication succeeded
-     */
-      (err: Error, user: any) => {
-        if (err || !user) {
-          const errorMessage = err?.message || 'Unauthorized';
-          requestLogger.error({ error: errorMessage });
-          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-          span.end();
+  const span = tracer.startSpan('auth_middleware_authenticate_jwt');
 
-          return res.status(StatusCodes.UNAUTHORIZED).json({ error: errorMessage });
-        }
-
-        req.user = user;
-        const successMessage = 'User authenticated successfully';
-        requestLogger.info({ userId: user.userId }, successMessage);
-        span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+  passport.authenticate('jwt', { session: false },
+    /**
+    * JWT authentication callback
+    * @param {Error} err - Error object if authentication failed
+    * @param {any} user - User object if authentication succeeded
+    */
+    (err: Error, user: any) => {
+      if (err || !user) {
+        const errorMessage = err?.message || 'Unauthorized';
+        requestLogger.error({ error: errorMessage });
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
         span.end();
 
-        next();
-      })(req, res, next);
-  });
+        return res.status(StatusCodes.UNAUTHORIZED).json({ error: errorMessage });
+      }
+
+      req.user = user;
+      const successMessage = 'User authenticated successfully';
+      requestLogger.info({ userId: user.userId }, successMessage);
+      span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+      span.end();
+
+      next();
+    })(req, res, next);
 };
 
 /**
@@ -146,31 +156,31 @@ export const authenticateLocal = (req: Request, res: Response, next: NextFunctio
     method: 'authenticateLocal',
   });
 
-  return tracer.startActiveSpan('authenticateLocal', async (span) => {
-    passport.authenticate('local', { session: false },
-      /**
-       * Local authentication callback
-       * @param {Error} err - Error object if authentication failed
-       * @param {any} user - User object if authentication succeeded
-       * @param {Object} info - Additional info object, may contain error message
-       */
-      (err: Error, user: any, info: { message?: string; }) => {
+  const span = tracer.startSpan('auth_middleware_authenticate_local');
 
-        if (err || !user) {
-          const errorMessage = info?.message || 'Local Authentication failed';
-          requestLogger.error({ error: err }, errorMessage);
-          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-          span.end();
-          return res.status(StatusCodes.BAD_REQUEST).json({ error: errorMessage });
-        }
+  passport.authenticate('local', { session: false },
+    /**
+     * Local authentication callback
+     * @param {Error} err - Error object if authentication failed
+     * @param {any} user - User object if authentication succeeded
+     * @param {Object} info - Additional info object, may contain error message
+     */
+    (err: Error, user: any, info: { message?: string; }) => {
 
-        req.user = user;
-        const successMessage = 'User authenticated successfully';
-        requestLogger.debug({ userId: user.userId }, successMessage);
-        span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+      if (err || !user) {
+        const errorMessage = info?.message || 'Local Authentication failed';
+        requestLogger.error({ error: err }, errorMessage);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
         span.end();
+        return res.status(StatusCodes.BAD_REQUEST).json({ error: errorMessage });
+      }
 
-        next();
-      })(req, res, next);
-  });
+      req.user = user;
+      const successMessage = 'User authenticated successfully';
+      requestLogger.debug({ userId: user.userId }, successMessage);
+      span.setStatus({ code: SpanStatusCode.OK, message: successMessage });
+      span.end();
+
+      next();
+    })(req, res, next);
 };
