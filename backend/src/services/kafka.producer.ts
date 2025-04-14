@@ -8,12 +8,16 @@ import { Kafka, Producer } from 'kafkajs';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import retry from 'async-retry';
 import dotenv from 'dotenv';
+import { createLogger } from '../lib/logger';
+
 dotenv.config();
 
 /** Kafka instance configured with broker from environment or default */
 const kafka = new Kafka({ brokers: [process.env.KAFKA_BROKER || 'kafka:9092'] });
 /** Kafka producer instance */
 const producer: Producer = kafka.producer();
+/** Logger instance for Kafka producer */
+const logger = createLogger({ module: 'kafka', component: 'producer' });
 
 /**
  * Connects to the Kafka broker with retry logic
@@ -23,17 +27,34 @@ const producer: Producer = kafka.producer();
  * @throws {Error} If connection fails after all retries
  */
 export const connectProducer = async () => {
-  await retry(
-    async () => {
-      await producer.connect();
-    },
-    {
-      retries: 5,
-      minTimeout: 1000,
-      factor: 2,
-      onRetry: (err: Error) => console.warn('Retrying producer connect:', err.message),
-    }
-  );
+  const tracer = trace.getTracer('kafka-producer');
+  const span = tracer.startSpan('kafka_producer_connect');
+
+  try {
+    await retry(
+      async () => {
+        await producer.connect();
+      },
+      {
+        retries: 5,
+        minTimeout: 1000,
+        factor: 2,
+        onRetry: (err: Error) => {
+          logger.warn({ error: err }, 'Retrying producer connect');
+          span.recordException(err);
+        },
+      }
+    );
+    span.setStatus({ code: SpanStatusCode.OK });
+    logger.info('Successfully connected to Kafka broker');
+  } catch (error) {
+    const errorMessage = (error as Error).message;
+    logger.error({ error }, 'Failed to connect to Kafka broker after all retries');
+    span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+    throw error;
+  } finally {
+    span.end();
+  }
 };
 
 /**
@@ -61,7 +82,10 @@ export const sendMessage = async (topic: string, message: any) => {
         retries: 3,
         minTimeout: 500,
         factor: 2,
-        onRetry: (err: Error) => console.warn(`Retrying send to ${topic}:`, err.message),
+        onRetry: (err: Error) => {
+          logger.warn({ error: err, topic }, 'Retrying send to topic');
+          span.recordException(err);
+        },
       }
     );
     span.setStatus({ code: SpanStatusCode.OK });
