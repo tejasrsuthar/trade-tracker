@@ -16,27 +16,28 @@ const tracer = trace.getTracer('trade-controller');
  * 
  * @param {Request} req - The incoming request object.
  * @param {Response} res - The outgoing response object.
- * @returns {Promise<void>} A promise that resolves when the function completes.
+ * @returns {Promise<Response>} A promise that resolves to the response object.
  */
-export const createLiveTrade = async (req: Request, res: Response) => {
-  return tracer.startActiveSpan('createLiveTrade', async (span) => {
-    try {
-      const data = liveTradeSchema.parse(req.body);
-      const trade: LiveTrade = {
-        id: Math.random().toString(36).substring(2),
-        ...data,
-        entryDate: new Date(),
-      };
-      await sendMessage('trade-events', { event: 'TradeCreated', trade });
-      span.setStatus({ code: SpanStatusCode.OK });
-      res.status(StatusCodes.CREATED).json(trade);
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
-    } finally {
-      span.end();
-    }
-  });
+export const createLiveTrade = async (req: Request, res: Response): Promise<Response> => {
+  const span = tracer.startSpan('createLiveTrade');
+  try {
+    const data = liveTradeSchema.parse(req.body);
+    const trade: LiveTrade = {
+      id: Math.random().toString(36).substring(2),
+      ...data,
+      entryDate: new Date(),
+    };
+    await sendMessage('trade-events', { event: 'TradeCreated', trade });
+    span.setStatus({ code: SpanStatusCode.OK });
+
+    return res.status(StatusCodes.CREATED).json(trade);
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+
+    return res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
+  } finally {
+    span.end();
+  }
 };
 
 /**
@@ -46,24 +47,25 @@ export const createLiveTrade = async (req: Request, res: Response) => {
  * 
  * @param {Request} req - The incoming request object.
  * @param {Response} res - The outgoing response object.
- * @returns {Promise<void>} A promise that resolves when the function completes.
+ * @returns {Promise<Response>} A promise that resolves to the response object.
  */
-export const updateLiveTrade = async (req: Request, res: Response) => {
-  return tracer.startActiveSpan('updateLiveTrade', async (span) => {
-    try {
-      const { id } = req.params;
-      const data = updateLiveTradeSchema.parse(req.body);
-      const trade: Partial<LiveTrade> = { id, ...data };
-      await sendMessage('trade-events', { event: 'TradeUpdated', trade });
-      span.setStatus({ code: SpanStatusCode.OK });
-      res.json(trade);
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
-    } finally {
-      span.end();
-    }
-  });
+export const updateLiveTrade = async (req: Request, res: Response): Promise<Response> => {
+  const span = tracer.startSpan('updateLiveTrade');
+  try {
+    const { id } = req.params;
+    const data = updateLiveTradeSchema.parse(req.body);
+    const trade: Partial<LiveTrade> = { id, ...data };
+    await sendMessage('trade-events', { event: 'TradeUpdated', trade });
+    span.setStatus({ code: SpanStatusCode.OK });
+
+    return res.json(trade);
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+
+    return res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
+  } finally {
+    span.end();
+  }
 };
 
 /**
@@ -73,22 +75,23 @@ export const updateLiveTrade = async (req: Request, res: Response) => {
  * 
  * @param {Request} req - The incoming request object.
  * @param {Response} res - The outgoing response object.
- * @returns {Promise<void>} A promise that resolves when the function completes.
+ * @returns {Promise<Response>} A promise that resolves to the response object.
  */
-export const deleteLiveTrade = async (req: Request, res: Response) => {
-  return tracer.startActiveSpan('deleteLiveTrade', async (span) => {
-    try {
-      const { id } = req.params;
-      await sendMessage('trade-events', { event: 'TradeDeleted', trade: { id } });
-      span.setStatus({ code: SpanStatusCode.OK });
-      res.status(204).send();
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
-    } finally {
-      span.end();
-    }
-  });
+export const deleteLiveTrade = async (req: Request, res: Response): Promise<Response> => {
+  const span = tracer.startSpan('deleteLiveTrade');
+  try {
+    const { id } = req.params;
+    await sendMessage('trade-events', { event: 'TradeDeleted', trade: { id } });
+    span.setStatus({ code: SpanStatusCode.OK });
+
+    return res.status(204).send();
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+
+    return res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
+  } finally {
+    span.end();
+  }
 };
 
 /**
@@ -99,23 +102,24 @@ export const deleteLiveTrade = async (req: Request, res: Response) => {
  * 
  * @param {Request} req - The incoming request object.
  * @param {Response} res - The outgoing response object.
- * @returns {Promise<void>} A promise that resolves when the function completes.
+ * @returns {Promise<Response>} A promise that resolves to the response object.
  */
-export const closeLiveTrade = async (req: Request, res: Response) => {
-  return tracer.startActiveSpan('closeLiveTrade', async (span) => {
-    try {
-      const { id } = req.params;
-      const { exitPrice, fees } = closeTradeSchema.parse(req.body);
-      await sendMessage('trade-events', { event: 'TradeClosed', trade: { id, exitPrice, fees } });
-      span.setStatus({ code: SpanStatusCode.OK });
-      res.status(StatusCodes.OK).json({ message: 'Trade closed' });
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
-    } finally {
-      span.end();
-    }
-  });
+export const closeLiveTrade = async (req: Request, res: Response): Promise<Response> => {
+  const span = tracer.startSpan('closeLiveTrade');
+  try {
+    const { id } = req.params;
+    const { exitPrice, fees } = closeTradeSchema.parse(req.body);
+    await sendMessage('trade-events', { event: 'TradeClosed', trade: { id, exitPrice, fees } });
+    span.setStatus({ code: SpanStatusCode.OK });
+
+    return res.status(StatusCodes.OK).json({ message: 'Trade closed' });
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+
+    return res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
+  } finally {
+    span.end();
+  }
 };
 
 /**
@@ -126,25 +130,26 @@ export const closeLiveTrade = async (req: Request, res: Response) => {
  * 
  * @param {Request} req - The incoming request object.
  * @param {Response} res - The outgoing response object.
- * @returns {Promise<void>} A promise that resolves when the function completes.
+ * @returns {Promise<Response>} A promise that resolves to the response object.
  */
-export const getLiveTradesHandler = async (req: Request, res: Response) => {
-  return tracer.startActiveSpan('getLiveTrades', async (span) => {
-    try {
-      const { accountId } = req.query;
-      if (!accountId || typeof accountId !== 'string') {
-        throw new Error('accountId is required');
-      }
-      const trades = await getLiveTrades(accountId);
-      span.setStatus({ code: SpanStatusCode.OK });
-      res.json(trades);
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
-    } finally {
-      span.end();
+export const getLiveTradesHandler = async (req: Request, res: Response): Promise<Response> => {
+  const span = tracer.startSpan('getLiveTrades');
+  try {
+    const { accountId } = req.query;
+    if (!accountId || typeof accountId !== 'string') {
+      throw new Error('accountId is required');
     }
-  });
+    const trades = await getLiveTrades(accountId);
+    span.setStatus({ code: SpanStatusCode.OK });
+
+    return res.json(trades);
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+
+    return res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
+  } finally {
+    span.end();
+  }
 };
 
 /**
@@ -155,23 +160,24 @@ export const getLiveTradesHandler = async (req: Request, res: Response) => {
  * 
  * @param {Request} req - The incoming request object.
  * @param {Response} res - The outgoing response object.
- * @returns {Promise<void>} A promise that resolves when the function completes.
+ * @returns {Promise<Response>} A promise that resolves to the response object.
  */
-export const getClosedTradesHandler = async (req: Request, res: Response) => {
-  return tracer.startActiveSpan('getClosedTrades', async (span) => {
-    try {
-      const { accountId } = req.query;
-      if (!accountId || typeof accountId !== 'string') {
-        throw new Error('accountId is required');
-      }
-      const trades = await getClosedTrades(accountId);
-      span.setStatus({ code: SpanStatusCode.OK });
-      res.json(trades);
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
-      res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
-    } finally {
-      span.end();
+export const getClosedTradesHandler = async (req: Request, res: Response): Promise<Response> => {
+  const span = tracer.startSpan('getClosedTrades');
+  try {
+    const { accountId } = req.query;
+    if (!accountId || typeof accountId !== 'string') {
+      throw new Error('accountId is required');
     }
-  });
+    const trades = await getClosedTrades(accountId);
+    span.setStatus({ code: SpanStatusCode.OK });
+
+    return res.json(trades);
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+
+    return res.status(StatusCodes.BAD_REQUEST).json({ error: (error as Error).message });
+  } finally {
+    span.end();
+  }
 };
